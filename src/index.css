@@ -1,0 +1,4 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Nunito', sans-serif; background: #FFF8F0; color: #2D3748; min-height: 100vh; }
+button { cursor: pointer; font-family: 'Nunito', sans-serif; }
+input { font-family: 'Nunito', sans-serif; }
