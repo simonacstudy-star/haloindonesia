@@ -6,9 +6,10 @@ import SayIt from './SayIt'
 import Flashcard from './Flashcard'
 import MatchGame from './MatchGame'
 import Quiz from './Quiz'
+import SentenceBuilder from './SentenceBuilder'
 import KikiChat from './KikiChat'
 
-const STORAGE_KEY = 'halo-indonesia-v2'
+const STORAGE_KEY = 'halo-indonesia-v3'
 
 function loadData() {
   try {
@@ -35,7 +36,6 @@ export default function App() {
 
   useEffect(() => { saveData(data) }, [data])
 
-  // If there was a previously active player, restore them
   useEffect(() => {
     if (data.currentPlayerId) {
       const p = data.players.find(pl => pl.id === data.currentPlayerId)
@@ -109,7 +109,6 @@ export default function App() {
     setActivityDone(true)
   }
 
-  // Show player select screen if no player chosen
   if (!currentPlayer) {
     return (
       <PlayerSelect
@@ -151,7 +150,11 @@ export default function App() {
 
           {/* Player badge */}
           <button
-            onClick={() => { setCurrentPlayer(null); setData(prev => ({ ...prev, currentPlayerId: null })) }}
+            onClick={() => {
+              setCurrentPlayer(null)
+              setData(prev => ({ ...prev, currentPlayerId: null }))
+              closeModal()
+            }}
             style={{
               background: 'rgba(255,255,255,0.25)',
               border: '2px solid rgba(255,255,255,0.4)',
@@ -206,47 +209,65 @@ export default function App() {
                 borderRadius: 20, padding: '1.25rem',
                 border: `2.5px solid ${status === 'completed' ? '#26C6A6' : status === 'active' ? lv.color : '#E2E8F0'}`,
                 cursor: status === 'locked' ? 'not-allowed' : 'pointer',
-                opacity: status === 'locked' ? 0.65 : 1,
+                opacity: status === 'locked' ? 0.6 : 1,
                 position: 'relative', overflow: 'hidden',
                 transition: 'all 0.2s',
                 boxShadow: status === 'active' ? `0 4px 20px ${lv.color}33` : 'none',
               }}
             >
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 5, background: lv.color, borderRadius: '20px 20px 0 0' }} />
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, height: 5,
+                background: lv.color, borderRadius: '20px 20px 0 0',
+              }} />
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <div style={{
                   width: 60, height: 60, borderRadius: 18,
-                  background: lv.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: lv.bg,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '2rem', flexShrink: 0,
                 }}>
                   {lv.emoji}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: "'Baloo 2', cursive", fontSize: '1.15rem', fontWeight: 700, color: '#2D3748' }}>
+                  <div style={{
+                    fontFamily: "'Baloo 2', cursive",
+                    fontSize: '1.1rem', fontWeight: 700, color: '#2D3748',
+                  }}>
                     {i + 1}. {lv.title} — {lv.titleIndo}
                   </div>
                   <div style={{ fontSize: '0.82rem', color: '#718096', fontWeight: 600, marginTop: 2 }}>
                     {lv.words.length} words • {TASKS.length} activities
                   </div>
                 </div>
-                <div style={{ padding: '0.3rem 0.75rem', borderRadius: 20, fontSize: '0.8rem', fontWeight: 700, background: badgeBg, color: badgeColor }}>
+                <div style={{
+                  padding: '0.3rem 0.75rem', borderRadius: 20,
+                  fontSize: '0.8rem', fontWeight: 700,
+                  background: badgeBg, color: badgeColor,
+                  flexShrink: 0,
+                }}>
                   {badgeText}
                 </div>
               </div>
 
+              {/* Progress bar */}
               <div style={{ marginTop: '0.9rem', height: 10, background: '#EDF2F7', borderRadius: 99, overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', background: lv.color, borderRadius: 99, transition: 'width 0.5s ease' }} />
+                <div style={{
+                  width: `${pct}%`, height: '100%',
+                  background: lv.color, borderRadius: 99,
+                  transition: 'width 0.5s ease',
+                }} />
               </div>
 
+              {/* Task pills */}
               <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                 {TASKS.map(t => {
                   const isDone = progress[i].tasksComplete.includes(t.id)
                   return (
                     <div key={t.id} style={{
                       display: 'flex', alignItems: 'center', gap: '0.3rem',
-                      fontSize: '0.78rem', fontWeight: 700,
-                      padding: '0.25rem 0.6rem', borderRadius: 10,
+                      fontSize: '0.75rem', fontWeight: 700,
+                      padding: '0.2rem 0.55rem', borderRadius: 10,
                       background: isDone ? '#E6FBF5' : status === 'locked' ? '#F7FAFC' : '#FFF0ED',
                       color: isDone ? '#0D9488' : status === 'locked' ? '#CBD5E0' : '#E85555',
                     }}>
@@ -276,6 +297,7 @@ export default function App() {
             width: '100%', maxWidth: 560,
             maxHeight: '90vh', overflowY: 'auto',
           }}>
+            {/* Modal header */}
             <div style={{
               padding: '1.25rem 1.5rem 1rem',
               borderBottom: '2px solid #F0F0F0',
@@ -283,25 +305,36 @@ export default function App() {
               position: 'sticky', top: 0, background: 'white', zIndex: 1,
               borderRadius: '24px 24px 0 0',
             }}>
-              <div style={{ fontFamily: "'Baloo 2', cursive", fontSize: '1.3rem', fontWeight: 800, color: LEVELS[currentLevel].color }}>
-                {currentTask ? TASKS.find(t => t.id === currentTask)?.icon + ' ' + TASKS.find(t => t.id === currentTask)?.name
+              <div style={{
+                fontFamily: "'Baloo 2', cursive",
+                fontSize: '1.3rem', fontWeight: 800,
+                color: LEVELS[currentLevel].color,
+              }}>
+                {currentTask
+                  ? `${TASKS.find(t => t.id === currentTask)?.icon} ${TASKS.find(t => t.id === currentTask)?.name}`
                   : `${LEVELS[currentLevel].emoji} ${LEVELS[currentLevel].title}`}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 {currentTask && !activityDone && (
-                  <button onClick={() => { setCurrentTask(null); setActivityDone(false) }} style={{
-                    padding: '0.35rem 0.9rem', borderRadius: 20,
-                    border: '1.5px solid #E2E8F0', background: 'white',
-                    color: '#718096', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer',
-                  }}>
+                  <button
+                    onClick={() => { setCurrentTask(null); setActivityDone(false) }}
+                    style={{
+                      padding: '0.35rem 0.9rem', borderRadius: 20,
+                      border: '1.5px solid #E2E8F0', background: 'white',
+                      color: '#718096', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
                     ← Back
                   </button>
                 )}
-                <button onClick={closeModal} style={{
-                  width: 36, height: 36, borderRadius: '50%', border: 'none',
-                  background: '#F7FAFC', fontSize: '1.2rem', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#718096',
-                }}>
+                <button
+                  onClick={closeModal}
+                  style={{
+                    width: 36, height: 36, borderRadius: '50%', border: 'none',
+                    background: '#F7FAFC', fontSize: '1.2rem', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#718096',
+                  }}
+                >
                   ✕
                 </button>
               </div>
@@ -328,6 +361,7 @@ export default function App() {
               {currentTask && !activityDone && currentTask === 'sayit' && <SayIt level={LEVELS[currentLevel]} onComplete={completeTask} />}
               {currentTask && !activityDone && currentTask === 'match' && <MatchGame level={LEVELS[currentLevel]} onComplete={completeTask} />}
               {currentTask && !activityDone && currentTask === 'quiz' && <Quiz level={LEVELS[currentLevel]} onComplete={completeTask} />}
+              {currentTask && !activityDone && currentTask === 'build' && <SentenceBuilder level={LEVELS[currentLevel]} onComplete={completeTask} />}
             </div>
           </div>
         </div>
@@ -346,7 +380,10 @@ function TaskSelector({ level, progress, onSelect }) {
         padding: '1rem', textAlign: 'center', marginBottom: '0.5rem',
       }}>
         <div style={{ fontSize: '2.5rem' }}>{level.emoji}</div>
-        <div style={{ fontFamily: "'Baloo 2', cursive", fontSize: '1.1rem', fontWeight: 800, color: 'white', marginTop: '0.25rem' }}>
+        <div style={{
+          fontFamily: "'Baloo 2', cursive",
+          fontSize: '1rem', fontWeight: 800, color: 'white', marginTop: '0.25rem',
+        }}>
           Complete all {TASKS.length} activities to unlock the next island! 🏝️
         </div>
       </div>
@@ -380,7 +417,10 @@ function TaskSelector({ level, progress, onSelect }) {
               {isLocked ? '🔒' : task.icon}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "'Baloo 2', cursive", fontWeight: 700, fontSize: '1.05rem', color: '#2D3748' }}>
+              <div style={{
+                fontFamily: "'Baloo 2', cursive",
+                fontWeight: 700, fontSize: '1.05rem', color: '#2D3748',
+              }}>
                 {task.name}
               </div>
               <div style={{ fontSize: '0.82rem', color: '#718096', marginTop: 2, fontWeight: 600 }}>
@@ -403,16 +443,22 @@ function SuccessScreen({ taskId, level, allTasksDone, onBack, onClose }) {
     sayit: { title: 'Great listening!', sub: 'You can recognise the sounds!', icon: '🔊' },
     match: { title: 'Perfect match!', sub: 'You matched them all!', icon: '🔗' },
     quiz: { title: 'Quiz complete!', sub: 'You answered the questions!', icon: '⭐' },
+    build: { title: 'Sentences built!', sub: 'You can build Indonesian sentences!', icon: '🧩' },
   }
-  const m = msgs[taskId]
+  const m = msgs[taskId] || { title: 'Done!', sub: 'Great work!', icon: '🎉' }
 
   return (
     <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
       <div style={{ fontSize: '4rem', marginBottom: '0.75rem' }}>{m.icon}</div>
-      <div style={{ fontFamily: "'Baloo 2', cursive", fontSize: '1.8rem', fontWeight: 800, color: '#2D3748', marginBottom: '0.5rem' }}>
+      <div style={{
+        fontFamily: "'Baloo 2', cursive",
+        fontSize: '1.8rem', fontWeight: 800, color: '#2D3748', marginBottom: '0.5rem',
+      }}>
         {m.title}
       </div>
-      <div style={{ color: '#718096', fontWeight: 600, marginBottom: '1rem', fontSize: '0.95rem' }}>{m.sub}</div>
+      <div style={{ color: '#718096', fontWeight: 600, marginBottom: '1rem', fontSize: '0.95rem' }}>
+        {m.sub}
+      </div>
       <div style={{ fontSize: '2.5rem', marginBottom: '1.25rem' }}>⭐⭐⭐</div>
 
       {allTasksDone && (
@@ -428,19 +474,25 @@ function SuccessScreen({ taskId, level, allTasksDone, onBack, onClose }) {
       )}
 
       <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-        <button onClick={onBack} style={{
-          padding: '0.75rem 1.5rem', borderRadius: 14,
-          border: '2px solid #E2E8F0', background: 'white',
-          color: '#2D3748', fontWeight: 700, fontSize: '0.95rem',
-          cursor: 'pointer', fontFamily: "'Nunito', sans-serif",
-        }}>
+        <button
+          onClick={onBack}
+          style={{
+            padding: '0.75rem 1.5rem', borderRadius: 14,
+            border: '2px solid #E2E8F0', background: 'white',
+            color: '#2D3748', fontWeight: 700, fontSize: '0.95rem',
+            cursor: 'pointer', fontFamily: "'Nunito', sans-serif",
+          }}
+        >
           ← More activities
         </button>
-        <button onClick={onClose} style={{
-          padding: '0.75rem 1.5rem', borderRadius: 14, border: 'none',
-          background: level.color, color: 'white', fontWeight: 700,
-          fontSize: '0.95rem', cursor: 'pointer', fontFamily: "'Nunito', sans-serif",
-        }}>
+        <button
+          onClick={onClose}
+          style={{
+            padding: '0.75rem 1.5rem', borderRadius: 14, border: 'none',
+            background: level.color, color: 'white', fontWeight: 700,
+            fontSize: '0.95rem', cursor: 'pointer', fontFamily: "'Nunito', sans-serif",
+          }}
+        >
           Back to map 🗺️
         </button>
       </div>
