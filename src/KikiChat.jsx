@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
+import { speakWithVoicesReady } from './speech'
 
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
 
-export default function KikiChat() {
+export default function KikiChat({ currentLevel }) {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([
-    { from: 'kiki', text: "Halo! I'm Kiki 🦜 your Indonesian helper! Ask me anything about the words you're learning!" },
+    { from: 'kiki', text: "Halo! I'm Kiki 🦜 Say the words out loud when you learn them — that's the secret to speaking Indonesian!" },
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -38,28 +39,26 @@ export default function KikiChat() {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 300,
-          system: `You are Kiki, a friendly and enthusiastic parrot who helps children learn Bahasa Indonesia. 
-You are cheerful, encouraging, and use simple language suitable for children aged 5-12.
-Keep answers SHORT (2-4 sentences max). Use relevant emojis. 
-If asked about Indonesian words, give the word, pronunciation tip, and a fun example.
-Always be positive and encouraging! Occasionally say words in Indonesian.`,
+          max_tokens: 200,
+          system: `You are Kiki, a friendly parrot who helps children aged 5-7 learn Bahasa Indonesia.
+Use VERY simple language. Keep answers to 2-3 short sentences maximum.
+Use fun emojis. Be encouraging and playful.
+If asked about Indonesian words, give the word and a simple pronunciation tip.
+${currentLevel ? `The child is currently learning about: ${currentLevel}` : ''}
+Always celebrate effort and say encouraging things in Indonesian like "Bagus!" (Great!) or "Hebat!" (Awesome!)`,
           messages: [...history, { role: 'user', content: text }],
         }),
       })
 
       const data = await response.json()
-      const reply = data.content?.[0]?.text || "Maaf! (Sorry!) I had trouble thinking. Try again!"
+      const reply = data.content?.[0]?.text || "Maaf! (Sorry!) Try again! 🦜"
       setMessages(prev => [...prev, { from: 'kiki', text: reply }])
+      speakWithVoicesReady(reply.replace(/[🦜🎉⭐🌴👋]/g, ''))
     } catch {
       setMessages(prev => [...prev, { from: 'kiki', text: "Aduh! Something went wrong. Make sure the API key is set! 🦜" }])
     } finally {
       setLoading(false)
     }
-  }
-
-  function handleKey(e) {
-    if (e.key === 'Enter') sendMessage()
   }
 
   return (
@@ -76,7 +75,6 @@ Always be positive and encouraging! Occasionally say words in Indonesian.`,
           transition: 'transform 0.2s', zIndex: 50,
           transform: open ? 'scale(1.1)' : 'scale(1)',
         }}
-        title="Ask Kiki"
       >
         🦜
       </button>
@@ -95,7 +93,10 @@ Always be positive and encouraging! Occasionally say words in Indonesian.`,
             display: 'flex', alignItems: 'center', gap: '0.6rem',
           }}>
             <span style={{ fontSize: '1.4rem' }}>🦜</span>
-            <span style={{ color: 'white', fontWeight: 700, fontSize: '0.95rem' }}>Kiki the Parrot</span>
+            <div>
+              <div style={{ color: 'white', fontWeight: 700, fontSize: '0.95rem' }}>Kiki the Parrot</div>
+              <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.75rem', fontWeight: 600 }}>Your language helper!</div>
+            </div>
           </div>
 
           <div style={{
@@ -106,8 +107,7 @@ Always be positive and encouraging! Occasionally say words in Indonesian.`,
               <div key={i} style={{
                 padding: '0.6rem 0.9rem',
                 borderRadius: m.from === 'kiki' ? '14px 14px 14px 4px' : '14px 14px 4px 14px',
-                fontSize: '0.85rem', fontWeight: 600,
-                maxWidth: '90%', lineHeight: 1.4,
+                fontSize: '0.85rem', fontWeight: 600, maxWidth: '90%', lineHeight: 1.4,
                 background: m.from === 'kiki' ? '#FAF5FF' : '#FF6B6B',
                 color: m.from === 'kiki' ? '#5B21B6' : 'white',
                 alignSelf: m.from === 'kiki' ? 'flex-start' : 'flex-end',
@@ -127,19 +127,16 @@ Always be positive and encouraging! Occasionally say words in Indonesian.`,
             <div ref={messagesEndRef} />
           </div>
 
-          <div style={{
-            display: 'flex', gap: '0.5rem', padding: '0.75rem',
-            borderTop: '1px solid #F0F0F0',
-          }}>
+          <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem', borderTop: '1px solid #F0F0F0' }}>
             <input
               value={input}
               onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKey}
-              placeholder="Ask Kiki anything..."
+              onKeyDown={e => e.key === 'Enter' && sendMessage()}
+              placeholder="Ask Kiki..."
               style={{
                 flex: 1, border: '1.5px solid #E2E8F0', borderRadius: 10,
                 padding: '0.5rem 0.75rem', fontSize: '0.85rem', fontWeight: 600,
-                color: '#2D3748', outline: 'none',
+                color: '#2D3748', outline: 'none', fontFamily: "'Nunito', sans-serif",
               }}
             />
             <button
@@ -147,8 +144,8 @@ Always be positive and encouraging! Occasionally say words in Indonesian.`,
               disabled={loading}
               style={{
                 width: 36, height: 36, borderRadius: 10,
-                background: '#A78BFA', border: 'none',
-                color: 'white', fontSize: '1rem',
+                background: '#A78BFA', border: 'none', color: 'white',
+                fontSize: '1rem', cursor: loading ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 opacity: loading ? 0.6 : 1,
               }}
