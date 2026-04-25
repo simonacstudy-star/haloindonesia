@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { LEVELS, TASKS } from './data'
 import PlayerSelect from './PlayerSelect'
 import Lesson from './Lesson'
+import ChoralRepeat from './ChoralRepeat'
+import QuickReview from './QuickReview'
 import SayIt from './SayIt'
 import Flashcard from './Flashcard'
 import MatchGame from './MatchGame'
@@ -12,17 +14,21 @@ import PictureMatch from './PictureMatch'
 import PictureQuiz from './PictureQuiz'
 import KikiChat from './KikiChat'
 
-const STORAGE_KEY = 'halo-indonesia-v4'
+const STORAGE_KEY = 'halo-indonesia-v5'
 
-// Tasks for 6-9 year olds
 const TASKS_ADVENTURER = TASKS
 
-// Tasks for 4-5 year olds — picture-based only, no reading
 const TASKS_LITTLE = [
   { id: 'audiotap', name: 'Listen & Tap!', icon: '👂', iconBg: '#FEF3C7', desc: 'Hear the word, tap the picture' },
   { id: 'picturematch', name: 'Picture Match!', icon: '🎴', iconBg: '#E0E7FF', desc: 'Match the pairs' },
   { id: 'picturequiz', name: 'Picture Quiz!', icon: '🎯', iconBg: '#FCE7F3', desc: 'Pick the right picture' },
 ]
+
+// Tasks that get a Quick Review warm-up before starting
+const REVIEW_BEFORE = ['match', 'quiz', 'build', 'picturematch', 'picturequiz']
+
+// Tasks that get Choral Repeat after completing
+const CHORAL_AFTER = ['lesson', 'audiotap']
 
 function getTasksForPlayer(player) {
   return player?.ageGroup === 'little' ? TASKS_LITTLE : TASKS_ADVENTURER
@@ -40,16 +46,18 @@ function saveData(data) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) } catch {}
 }
 
-function emptyProgress(tasks) {
-  return LEVELS.map(() => ({ tasksComplete: [] }))
-}
-
 export default function App() {
   const [data, setData] = useState(loadData)
   const [currentPlayer, setCurrentPlayer] = useState(null)
   const [currentLevel, setCurrentLevel] = useState(null)
   const [currentTask, setCurrentTask] = useState(null)
-  const [activityDone, setActivityDone] = useState(false)
+
+  // Sub-states within an activity
+  // 'review'   = Quick Review warm-up before activity
+  // 'activity' = the main activity itself
+  // 'choral'   = Choral Repeat after activity
+  // 'success'  = success screen
+  const [subState, setSubState] = useState('activity')
 
   useEffect(() => { saveData(data) }, [data])
 
@@ -87,7 +95,6 @@ export default function App() {
   }
 
   function addPlayer(playerInfo) {
-    const tasks = getTasksForPlayer(playerInfo)
     const newPlayer = {
       ...playerInfo,
       progress: LEVELS.map(() => ({ tasksComplete: [] })),
@@ -108,16 +115,49 @@ export default function App() {
     if (getLevelStatus(i) === 'locked') return
     setCurrentLevel(i)
     setCurrentTask(null)
-    setActivityDone(false)
+    setSubState('activity')
   }
 
   function closeModal() {
     setCurrentLevel(null)
     setCurrentTask(null)
-    setActivityDone(false)
+    setSubState('activity')
   }
 
-  function completeTask() {
+  function openTask(taskId) {
+    setCurrentTask(taskId)
+    // Decide whether to show quick review first
+    const progress = getProgress()
+    const hasCompletedLesson = progress[currentLevel]?.tasksComplete.includes('lesson') ||
+      progress[currentLevel]?.tasksComplete.includes('audiotap')
+
+    if (REVIEW_BEFORE.includes(taskId) && hasCompletedLesson) {
+      setSubState('review')
+    } else {
+      setSubState('activity')
+    }
+  }
+
+  function onReviewComplete() {
+    setSubState('activity')
+  }
+
+  function onActivityComplete() {
+    // After certain activities, show choral repeat
+    if (CHORAL_AFTER.includes(currentTask)) {
+      setSubState('choral')
+    } else {
+      markTaskComplete()
+      setSubState('success')
+    }
+  }
+
+  function onChoralComplete() {
+    markTaskComplete()
+    setSubState('success')
+  }
+
+  function markTaskComplete() {
     const taskId = currentTask
     const lvIdx = currentLevel
     setData(prev => ({
@@ -133,7 +173,6 @@ export default function App() {
         return { ...p, progress, starsTotal }
       }),
     }))
-    setActivityDone(true)
   }
 
   if (!currentPlayer) {
@@ -153,7 +192,15 @@ export default function App() {
   const isLittle = player?.ageGroup === 'little'
   const totalStars = progress.reduce((s, p) => s + p.tasksComplete.length, 0)
   const completedLevels = progress.filter(p => p.tasksComplete.length >= tasks.length).length
-  const accentColor = isLittle ? '#FB923C' : '#FF6B6B'
+
+  // Modal title
+  function getModalTitle() {
+    if (subState === 'review') return '🔁 Quick Review'
+    if (subState === 'choral') return '🗣️ Say It Together!'
+    if (subState === 'success') return '✅ Done!'
+    if (currentTask) return `${tasks.find(t => t.id === currentTask)?.icon} ${tasks.find(t => t.id === currentTask)?.name}`
+    return `${LEVELS[currentLevel]?.emoji} ${LEVELS[currentLevel]?.title}`
+  }
 
   return (
     <div style={{ maxWidth: 680, margin: '0 auto', padding: '1rem', paddingBottom: '6rem' }}>
@@ -178,9 +225,12 @@ export default function App() {
               {isLittle ? '🐣 Little Explorer mode' : '🌟 Island Adventurer mode'}
             </p>
           </div>
-
           <button
-            onClick={() => { setCurrentPlayer(null); setData(prev => ({ ...prev, currentPlayerId: null })); closeModal() }}
+            onClick={() => {
+              setCurrentPlayer(null)
+              setData(prev => ({ ...prev, currentPlayerId: null }))
+              closeModal()
+            }}
             style={{
               background: 'rgba(255,255,255,0.25)',
               border: '2px solid rgba(255,255,255,0.4)',
@@ -196,7 +246,6 @@ export default function App() {
             </div>
           </button>
         </div>
-
         <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
           {[`⭐ ${totalStars} Stars`, `🏝️ ${completedLevels}/${LEVELS.length} Islands`].map(s => (
             <div key={s} style={{
@@ -218,7 +267,7 @@ export default function App() {
           const pct = Math.round((done / tasks.length) * 100)
           const badgeBg = status === 'locked' ? '#EDF2F7' : status === 'completed' ? '#E6FBF5' : '#FFF0ED'
           const badgeColor = status === 'locked' ? '#CBD5E0' : status === 'completed' ? '#0D9488' : '#E85555'
-          const badgeText = status === 'locked' ? '🔒 Locked' : status === 'completed' ? '✅ Done!' : isLittle ? '▶ Play!' : '▶ Play'
+          const badgeText = status === 'locked' ? '🔒 Locked' : status === 'completed' ? '✅ Done!' : '▶ Play'
 
           return (
             <div
@@ -240,11 +289,9 @@ export default function App() {
               }}
             >
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 5, background: lv.color, borderRadius: '20px 20px 0 0' }} />
-
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <div style={{
-                  width: isLittle ? 68 : 60,
-                  height: isLittle ? 68 : 60,
+                  width: isLittle ? 68 : 60, height: isLittle ? 68 : 60,
                   borderRadius: 18, background: lv.bg,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: isLittle ? '2.2rem' : '2rem', flexShrink: 0,
@@ -252,11 +299,7 @@ export default function App() {
                   {lv.emoji}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{
-                    fontFamily: "'Baloo 2', cursive",
-                    fontSize: isLittle ? '1.2rem' : '1.1rem',
-                    fontWeight: 700, color: '#2D3748',
-                  }}>
+                  <div style={{ fontFamily: "'Baloo 2', cursive", fontSize: isLittle ? '1.2rem' : '1.1rem', fontWeight: 700, color: '#2D3748' }}>
                     {i + 1}. {lv.title}
                     {!isLittle && <span style={{ color: '#718096', fontWeight: 600 }}> — {lv.titleIndo}</span>}
                   </div>
@@ -272,11 +315,9 @@ export default function App() {
                   {badgeText}
                 </div>
               </div>
-
               <div style={{ marginTop: '0.9rem', height: isLittle ? 14 : 10, background: '#EDF2F7', borderRadius: 99, overflow: 'hidden' }}>
                 <div style={{ width: `${pct}%`, height: '100%', background: lv.color, borderRadius: 99, transition: 'width 0.5s ease' }} />
               </div>
-
               <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                 {tasks.map(t => {
                   const isDone = progress[i].tasksComplete.includes(t.id)
@@ -314,6 +355,7 @@ export default function App() {
             width: '100%', maxWidth: 560,
             maxHeight: '92vh', overflowY: 'auto',
           }}>
+            {/* Modal header */}
             <div style={{
               padding: '1.25rem 1.5rem 1rem',
               borderBottom: '2px solid #F0F0F0',
@@ -321,62 +363,93 @@ export default function App() {
               position: 'sticky', top: 0, background: 'white', zIndex: 1,
               borderRadius: '24px 24px 0 0',
             }}>
-              <div style={{ fontFamily: "'Baloo 2', cursive", fontSize: isLittle ? '1.4rem' : '1.3rem', fontWeight: 800, color: LEVELS[currentLevel].color }}>
-                {currentTask
-                  ? `${tasks.find(t => t.id === currentTask)?.icon} ${tasks.find(t => t.id === currentTask)?.name}`
-                  : `${LEVELS[currentLevel].emoji} ${LEVELS[currentLevel].title}`}
+              <div style={{
+                fontFamily: "'Baloo 2', cursive",
+                fontSize: isLittle ? '1.4rem' : '1.3rem', fontWeight: 800,
+                color: currentLevel !== null ? LEVELS[currentLevel].color : '#2D3748',
+              }}>
+                {getModalTitle()}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                {currentTask && !activityDone && (
-                  <button onClick={() => { setCurrentTask(null); setActivityDone(false) }} style={{
-                    padding: '0.35rem 0.9rem', borderRadius: 20,
-                    border: '1.5px solid #E2E8F0', background: 'white',
-                    color: '#718096', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer',
-                  }}>
+                {currentTask && subState === 'activity' && (
+                  <button
+                    onClick={() => { setCurrentTask(null); setSubState('activity') }}
+                    style={{
+                      padding: '0.35rem 0.9rem', borderRadius: 20,
+                      border: '1.5px solid #E2E8F0', background: 'white',
+                      color: '#718096', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
                     ← Back
                   </button>
                 )}
-                <button onClick={closeModal} style={{
-                  width: 36, height: 36, borderRadius: '50%', border: 'none',
-                  background: '#F7FAFC', fontSize: '1.2rem', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#718096',
-                }}>
+                <button
+                  onClick={closeModal}
+                  style={{
+                    width: 36, height: 36, borderRadius: '50%', border: 'none',
+                    background: '#F7FAFC', fontSize: '1.2rem', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#718096',
+                  }}
+                >
                   ✕
                 </button>
               </div>
             </div>
 
             <div style={{ padding: '1.25rem 1.5rem' }}>
-              {!currentTask && !activityDone && (
+
+              {/* Task selector */}
+              {!currentTask && (
                 <TaskSelector
                   level={LEVELS[currentLevel]}
                   progress={progress[currentLevel]}
                   tasks={tasks}
                   isLittle={isLittle}
-                  onSelect={taskId => { setCurrentTask(taskId); setActivityDone(false) }}
+                  onSelect={openTask}
                 />
               )}
-              {currentTask && activityDone && (
+
+              {/* Quick Review warm-up */}
+              {currentTask && subState === 'review' && (
+                <QuickReview
+                  level={LEVELS[currentLevel]}
+                  isLittle={isLittle}
+                  onComplete={onReviewComplete}
+                />
+              )}
+
+              {/* Choral Repeat reinforcement */}
+              {currentTask && subState === 'choral' && (
+                <ChoralRepeat
+                  level={LEVELS[currentLevel]}
+                  onComplete={onChoralComplete}
+                />
+              )}
+
+              {/* Success screen */}
+              {currentTask && subState === 'success' && (
                 <SuccessScreen
                   taskId={currentTask}
                   tasks={tasks}
                   level={LEVELS[currentLevel]}
                   allTasksDone={progress[currentLevel].tasksComplete.length >= tasks.length}
                   isLittle={isLittle}
-                  onBack={() => { setCurrentTask(null); setActivityDone(false) }}
+                  onBack={() => { setCurrentTask(null); setSubState('activity') }}
                   onClose={closeModal}
                 />
               )}
-              {/* Little Explorer activities */}
-              {currentTask && !activityDone && currentTask === 'audiotap' && <AudioTap level={LEVELS[currentLevel]} onComplete={completeTask} />}
-              {currentTask && !activityDone && currentTask === 'picturematch' && <PictureMatch level={LEVELS[currentLevel]} onComplete={completeTask} />}
-              {currentTask && !activityDone && currentTask === 'picturequiz' && <PictureQuiz level={LEVELS[currentLevel]} onComplete={completeTask} />}
-              {/* Island Adventurer activities */}
-              {currentTask && !activityDone && currentTask === 'lesson' && <Lesson level={LEVELS[currentLevel]} onComplete={completeTask} />}
-              {currentTask && !activityDone && currentTask === 'sayit' && <SayIt level={LEVELS[currentLevel]} onComplete={completeTask} />}
-              {currentTask && !activityDone && currentTask === 'match' && <MatchGame level={LEVELS[currentLevel]} onComplete={completeTask} />}
-              {currentTask && !activityDone && currentTask === 'quiz' && <Quiz level={LEVELS[currentLevel]} onComplete={completeTask} />}
-              {currentTask && !activityDone && currentTask === 'build' && <SentenceBuilder level={LEVELS[currentLevel]} onComplete={completeTask} />}
+
+              {/* Activities — Adventurer */}
+              {currentTask && subState === 'activity' && currentTask === 'lesson' && <Lesson level={LEVELS[currentLevel]} onComplete={onActivityComplete} />}
+              {currentTask && subState === 'activity' && currentTask === 'sayit' && <SayIt level={LEVELS[currentLevel]} onComplete={onActivityComplete} />}
+              {currentTask && subState === 'activity' && currentTask === 'match' && <MatchGame level={LEVELS[currentLevel]} onComplete={onActivityComplete} />}
+              {currentTask && subState === 'activity' && currentTask === 'quiz' && <Quiz level={LEVELS[currentLevel]} onComplete={onActivityComplete} />}
+              {currentTask && subState === 'activity' && currentTask === 'build' && <SentenceBuilder level={LEVELS[currentLevel]} onComplete={onActivityComplete} />}
+
+              {/* Activities — Little Explorer */}
+              {currentTask && subState === 'activity' && currentTask === 'audiotap' && <AudioTap level={LEVELS[currentLevel]} onComplete={onActivityComplete} />}
+              {currentTask && subState === 'activity' && currentTask === 'picturematch' && <PictureMatch level={LEVELS[currentLevel]} onComplete={onActivityComplete} />}
+              {currentTask && subState === 'activity' && currentTask === 'picturequiz' && <PictureQuiz level={LEVELS[currentLevel]} onComplete={onActivityComplete} />}
             </div>
           </div>
         </div>
@@ -400,9 +473,7 @@ function TaskSelector({ level, progress, tasks, isLittle, onSelect }) {
           fontSize: isLittle ? '1.1rem' : '1rem',
           fontWeight: 800, color: 'white', marginTop: '0.25rem',
         }}>
-          {isLittle
-            ? `Do all ${tasks.length} activities! 🎉`
-            : `Complete all ${tasks.length} activities to unlock the next island! 🏝️`}
+          {isLittle ? `Do all ${tasks.length} activities! 🎉` : `Complete all ${tasks.length} activities to unlock the next island! 🏝️`}
         </div>
       </div>
 
@@ -410,6 +481,8 @@ function TaskSelector({ level, progress, tasks, isLittle, onSelect }) {
         const isDone = progress.tasksComplete.includes(task.id)
         const prevDone = i === 0 || progress.tasksComplete.includes(tasks[i - 1].id)
         const isLocked = !isDone && !prevDone
+        const hasReview = ['match', 'quiz', 'build', 'picturematch', 'picturequiz'].includes(task.id)
+        const lessonDone = progress.tasksComplete.includes('lesson') || progress.tasksComplete.includes('audiotap')
 
         return (
           <div
@@ -428,8 +501,7 @@ function TaskSelector({ level, progress, tasks, isLittle, onSelect }) {
             }}
           >
             <div style={{
-              width: isLittle ? 56 : 52,
-              height: isLittle ? 56 : 52,
+              width: isLittle ? 56 : 52, height: isLittle ? 56 : 52,
               borderRadius: 14,
               background: isDone ? '#CCFBF1' : task.iconBg,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -438,16 +510,14 @@ function TaskSelector({ level, progress, tasks, isLittle, onSelect }) {
               {isLocked ? '🔒' : task.icon}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{
-                fontFamily: "'Baloo 2', cursive",
-                fontWeight: 700,
-                fontSize: isLittle ? '1.15rem' : '1.05rem',
-                color: '#2D3748',
-              }}>
+              <div style={{ fontFamily: "'Baloo 2', cursive", fontWeight: 700, fontSize: isLittle ? '1.15rem' : '1.05rem', color: '#2D3748' }}>
                 {task.name}
               </div>
               <div style={{ fontSize: isLittle ? '0.88rem' : '0.82rem', color: '#718096', marginTop: 2, fontWeight: 600 }}>
                 {task.desc}
+                {hasReview && lessonDone && !isDone && (
+                  <span style={{ color: '#F59E0B', marginLeft: '0.4rem' }}>· includes quick review 🔁</span>
+                )}
               </div>
             </div>
             <div style={{ fontSize: '1.4rem' }}>
@@ -462,14 +532,14 @@ function TaskSelector({ level, progress, tasks, isLittle, onSelect }) {
 
 function SuccessScreen({ taskId, tasks, level, allTasksDone, isLittle, onBack, onClose }) {
   const msgs = {
-    lesson: { title: 'Words learned!', sub: 'You heard and practised every word!', icon: '📖' },
-    sayit: { title: 'Great listening!', sub: 'You recognised the sounds!', icon: '🔊' },
-    match: { title: 'Perfect match!', sub: 'You matched them all!', icon: '🔗' },
-    quiz: { title: 'Quiz complete!', sub: 'You answered the questions!', icon: '⭐' },
-    build: { title: 'Sentences built!', sub: 'You can build Indonesian sentences!', icon: '🧩' },
-    audiotap: { title: 'Great listening!', sub: 'You heard and tapped the right pictures!', icon: '👂' },
-    picturematch: { title: 'All matched!', sub: 'You found every pair!', icon: '🎴' },
-    picturequiz: { title: 'Quiz done!', sub: 'You picked the right pictures!', icon: '🎯' },
+    lesson:       { title: 'Words learned!',      sub: 'You heard and said every word!',       icon: '📖' },
+    sayit:        { title: 'Great listening!',     sub: 'You recognised the sounds!',           icon: '🔊' },
+    match:        { title: 'Perfect match!',       sub: 'You matched them all!',                icon: '🔗' },
+    quiz:         { title: 'Quiz complete!',       sub: 'You answered the questions!',          icon: '⭐' },
+    build:        { title: 'Sentences built!',     sub: 'You can make Indonesian sentences!',   icon: '🧩' },
+    audiotap:     { title: 'Great listening!',     sub: 'You heard and tapped the pictures!',   icon: '👂' },
+    picturematch: { title: 'All matched!',         sub: 'You found every pair!',                icon: '🎴' },
+    picturequiz:  { title: 'Quiz done!',           sub: 'You picked the right pictures!',       icon: '🎯' },
   }
   const m = msgs[taskId] || { title: 'Done!', sub: 'Great work!', icon: '🎉' }
 
